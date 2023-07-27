@@ -2,7 +2,13 @@
 
 set -xe
 
-options="-Wall -Wextra -Werror -Wpedantic -g"
+options="-Wall -Wextra -Wpedantic -g"
+
+annoying="-Werror"
+
+libs="-lwayland-client -lrt"
+
+libfiles="xdg-shell-protocol.c"
 
 build_dir="debug"
 
@@ -13,4 +19,4 @@ else
   echo "debug directory already exists."
 fi
 
-clang $options -o ./debug/debug main.c
+clang $options -o ./debug/debug main.c $libfiles $libs
