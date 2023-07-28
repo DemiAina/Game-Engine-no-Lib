@@ -92,8 +92,25 @@ void resz(){
 void draw(){
 
     memset(pixel, 255, w * h * 4);
+    wl_surface_attach(surf, buf, 0 ,0); // Here sway (my compositor will put is where it want it to go
+    wl_surface_damage_buffer(surf, 0 , 0 , w, h); // This may cause issues with games need to do research
+    wl_surface_commit(surf);
 
 }
+
+struct wl_callback_listener cb_listen;
+
+// Refresh frame
+void ref_frame(void *data, struct wl_callback *cb , uint32_t callback_data){
+    wl_callback_destroy(cb);
+    cb = wl_surface_frame(surf);
+    wl_callback_add_listener(cb, &cb_listen, 0);
+    draw();
+}
+
+struct wl_callback_listener cb_listen = {
+    .done = ref_frame
+};
 
 void xrfc_conf(void *data, struct xdg_surface *xrfc, uint32_t ser){
     xdg_surface_ack_configure(xrfc, ser);
@@ -102,9 +119,6 @@ void xrfc_conf(void *data, struct xdg_surface *xrfc, uint32_t ser){
         resz();
     }
     draw();
-    wl_surface_attach(surf, buf, 0 ,0); // Here sway (my compositor will put is where it want it to go
-    wl_surface_damage_buffer(surf, 0 , 0 , w, h); // This may cause issues with games need to do research
-    wl_surface_commit(surf);
 }
 
 struct xdg_surface_listener xrfc_list = {
@@ -144,7 +158,8 @@ int main(void){
     wl_display_roundtrip(display);
 
     surf = wl_compositor_create_surface(comp);
-
+    struct wl_callback *callback = wl_surface_frame(surf);
+    wl_callback_add_listener(callback, &cb_listen, 0);
     struct xdg_surface *x_surf = xdg_wm_base_get_xdg_surface(sh, surf);
     xdg_surface_add_listener(x_surf, &xrfc_list, 0);
 
