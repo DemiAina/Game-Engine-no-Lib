@@ -91,6 +91,8 @@ void resz(){
 
 void draw(){
 
+    memset(pixel, 255, w * h * 4);
+
 }
 
 void xrfc_conf(void *data, struct xdg_surface *xrfc, uint32_t ser){
@@ -161,6 +163,8 @@ int main(void){
         wl_buffer_destroy(buf);
         fprintf(stderr, "Buffer has been destroyed");
     }
+    xdg_toplevel_destroy(top);
+    xdg_surface_destroy(x_surf);
     wl_surface_destroy(surf);
     wl_display_disconnect(display);
 
