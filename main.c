@@ -21,15 +21,22 @@
 * 
 */
 
+
 struct wl_compositor *comp;
 struct wl_surface *surf;
 struct wl_buffer *buf;
 struct wl_shm *shared_M;
 struct xdg_vm_base *sh;
 struct xdg_toplevel *top;
+struct wl_seat *seat;
+// Keyboard input
+struct wl_keyboard *keyboard;
+
 uint8_t *pixel;
-uint64_t h = 800;
-uint64_t w = 600;
+uint64_t h = 200;
+uint64_t w = 100;
+uint8_t c = 0;
+uint8_t close_window = 0;
 
 int32_t alloc_shareM(uint64_t sz){
         int8_t name[8];
@@ -53,6 +60,55 @@ struct xdg_wm_base_listener sh_list = {
     .ping = sh_ping
 };
 
+void keyboard_map(void *data, struct wl_keyboard *keyboard, uint32_t frmt, int32_t fd, uint32_t sz){
+
+}
+
+void keyboard_enter(void *data, struct wl_keyboard *keyboard, uint32_t ser, struct wl_surface *surf, struct wl_array *keys){
+
+}
+
+void keyboard_leave(void *data, struct wl_keyboard *keyboard, uint32_t ser, struct wl_surface *surf){
+}
+
+void keyboard_key(void *data , struct wl_keyboard *keyboard, uint32_t ser,uint32_t t, uint32_t key, uint32_t stat){
+    // Found out that the OS accutally sends scancodes, to report the position of the keyboard and doesnt send ascii intresting. This is because ascii is the representation of charater in memory
+}
+
+
+void keyboard_mod(void *data, struct wl_keyboard *keyboard, uint32_t ser, uint32_t deps, uint32_t lat, uint32_t lock, uint32_t grp){
+}
+
+void keyboard_report(void *data, struct wl_keyboard *keyboard, int32_t rate, int32_t del){
+}
+
+struct wl_keyboard_listener keyboard_listen = {
+    .keymap = keyboard_map,
+    .enter = keyboard_enter,
+    .leave = keyboard_leave,
+    .key = keyboard_key, 
+    .modifiers = keyboard_mod,
+    .repeat_info = keyboard_report
+};
+
+
+void seat_capabilities(void *data , struct wl_seat *seat, uint32_t capabilites){
+
+    if(capabilites && WL_SEAT_CAPABILITY_KEYBOARD && !keyboard){
+        keyboard = wl_seat_get_keyboard(seat);
+        wl_keyboard_add_listener(keyboard, &keyboard_listen, 0);
+    }
+}
+
+void seat_name(void *data, struct wl_seat *seat, uint8_t *name){
+
+}
+
+struct wl_seat_listener seat_listen = {
+        .capabilities = seat_capabilities,
+        .name = seat_name
+};
+
 void req_glob(void *data, struct wl_registry *reg, uint32_t name, const char *intf, uint32_t v){
     if(!strcmp(intf, wl_compositor_interface.name)){
         comp = wl_registry_bind(reg, name, &wl_compositor_interface, 4);
@@ -64,6 +120,12 @@ void req_glob(void *data, struct wl_registry *reg, uint32_t name, const char *in
         sh = wl_registry_bind(reg, name, &xdg_wm_base_interface, 1);
         xdg_wm_base_add_listener(sh, &sh_list, 0);
     }
+
+    else if(!strcmp(intf, wl_seat_interface.name)){
+        seat = wl_registry_bind(reg, name, &wl_seat_interface, 1);
+        wl_seat_add_listener(seat, &seat_listen, 0);
+    }
+
 }
 
 void req_glob_rem(void *data, struct wl_registry *req, uint32_t name){
@@ -90,11 +152,12 @@ void resz(){
 }
 
 void draw(){
-
-    memset(pixel, 255, w * h * 4);
+    // Set c back to 255 later
+    memset(pixel, c, w * h * 4);
     wl_surface_attach(surf, buf, 0 ,0); // Here sway (my compositor will put is where it want it to go
     wl_surface_damage_buffer(surf, 0 , 0 , w, h); // This may cause issues with games need to do research
     wl_surface_commit(surf);
+    c++;
 
 }
 
@@ -115,7 +178,7 @@ struct wl_callback_listener cb_listen = {
 void xrfc_conf(void *data, struct xdg_surface *xrfc, uint32_t ser){
     xdg_surface_ack_configure(xrfc, ser);
     if(!pixel){
-        fprintf(stderr, "Resizing Window");
+        fprintf(stderr, "Resizing Window\n");
         resz();
     }
     draw();
@@ -125,12 +188,20 @@ struct xdg_surface_listener xrfc_list = {
     .configure = xrfc_conf
 };
 
-void top_conf(void *data, struct  xdg_toplevel *top, int32_t w, int32_t h, struct wl_array *stats){
-
+void top_conf(void *data, struct  xdg_toplevel *top, int32_t nw, int32_t nh, struct wl_array *stats){
+    if (!nw && !nh){
+        return;
+    }
+    if( w != nw || h != nh){
+        munmap(pixel, w * h * 4);
+        w = nw;
+        h = nh;
+        resz();
+    }
 }
 
 void top_close(void *data, struct xdg_toplevel *top){
-    
+    close_window = 1;
 }
 
 struct xdg_toplevel_listener top_list = {
@@ -170,10 +241,15 @@ int main(void){
     wl_surface_commit(surf);
 
     while(wl_display_dispatch(display)){
+        if(close_window) break; 
+    }
 
+    if(keyboard){
+        wl_keyboard_destroy(keyboard);
     }
 
     // Clean up
+    wl_seat_release(seat);
     if(buf){
         wl_buffer_destroy(buf);
         fprintf(stderr, "Buffer has been destroyed");
@@ -182,6 +258,7 @@ int main(void){
     xdg_surface_destroy(x_surf);
     wl_surface_destroy(surf);
     wl_display_disconnect(display);
+
 
     return 0;
 }
